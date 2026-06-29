@@ -25,7 +25,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret")
+
+flask_secret_key = os.getenv("FLASK_SECRET_KEY")
+if not flask_secret_key:
+    raise ValueError("FLASK_SECRET_KEY environment variable not set. Please set it to a secure random string.")
+app.secret_key = flask_secret_key
+
 CORS(app, supports_credentials=True) # Enable CORS for frontend
 
 ir = IntentRecognizer()
