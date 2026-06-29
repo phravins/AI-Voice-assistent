@@ -125,9 +125,13 @@ def api_library():
 def api_delete_document(doc_id):
     """Delete a document."""
     try:
+        abs_base = os.path.abspath(UPLOADS_DIR)
         fname = f"{doc_id}.pdf"
-        fpath = os.path.join(UPLOADS_DIR, fname)
+        fpath = os.path.abspath(os.path.join(abs_base, fname))
         
+        if not fpath.startswith(abs_base + os.sep):
+            return jsonify({"error": "Invalid document ID"}), 400
+
         if os.path.exists(fpath):
             os.remove(fpath)
             return jsonify({"message": "Document deleted"}), 200
