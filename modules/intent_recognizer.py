@@ -7,9 +7,9 @@ class IntentRecognizer:
     def __init__(self):
         self.intents = {
             "SUMMARIZE": [r"summarize", r"summary of", r"what is the summary"],
+            "EXPLAIN_LINE": [r"explain line (\d+)", r"explain sentence (\d+)", r"detail line (\d+)"],
             "EXPLAIN": [r"explain", r"what is", r"what does", r"define", r"describe", r"tell me about", r"meaning of"],
             "TRANSLATE": [r"translate", r"translation", r"change language", r"speak in", r"convert to"],
-            "EXPLAIN_LINE": [r"explain line (\d+)", r"explain sentence (\d+)", r"detail line (\d+)"],
             "QUIZ": [r"quiz", r"question", r"test me", r"ask me"],
             "NAVIGATE_NEXT": [r"next page", r"go to next", r"next"],
             "NAVIGATE_PREV": [r"previous page", r"go to previous", r"back", r"previous"],
