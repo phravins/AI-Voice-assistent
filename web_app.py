@@ -128,8 +128,15 @@ def api_delete_document(doc_id):
         fname = f"{doc_id}.pdf"
         fpath = os.path.join(UPLOADS_DIR, fname)
         
-        if os.path.exists(fpath):
-            os.remove(fpath)
+        abs_uploads_dir = os.path.abspath(UPLOADS_DIR)
+        abs_fpath = os.path.abspath(fpath)
+
+        if not abs_fpath.startswith(abs_uploads_dir + os.sep):
+            logger.warning(f"Path traversal attempt blocked: {doc_id}")
+            return jsonify({"error": "Invalid document ID"}), 400
+
+        if os.path.exists(abs_fpath):
+            os.remove(abs_fpath)
             return jsonify({"message": "Document deleted"}), 200
         else:
             return jsonify({"error": "File not found"}), 404
