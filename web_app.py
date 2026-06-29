@@ -50,9 +50,12 @@ def _generate_audio(text):
 
 # --- API Endpoints ---
 
+_max_pdf_index = None
+
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     """Upload PDF and return metadata."""
+    global _max_pdf_index
     file = request.files.get("pdf")
     if not file or not file.filename.lower().endswith(".pdf"):
         return jsonify({"error": "Invalid file format. Please upload a PDF."}), 400
@@ -61,17 +64,22 @@ def api_upload():
     
     # Sequential Naming Logic
     try:
-        existing_files = [f for f in os.listdir(UPLOADS_DIR) if f.startswith("PDF_") and f.endswith(".pdf")]
-        max_index = 0
-        import re
-        for f in existing_files:
-            match = re.search(r"PDF_(\d+).pdf", f)
-            if match:
-                idx = int(match.group(1))
-                if idx > max_index:
-                    max_index = idx
-        
-        new_index = max_index + 1
+        if _max_pdf_index is None:
+            max_index = 0
+            # if os.scandir fails (e.g. UPLOADS_DIR doesn't exist), let it raise and fallback
+            for entry in os.scandir(UPLOADS_DIR):
+                name = entry.name
+                if name.startswith("PDF_") and name.endswith(".pdf"):
+                    try:
+                        idx = int(name[4:-4])
+                        if idx > max_index:
+                            max_index = idx
+                    except ValueError:
+                        pass
+            _max_pdf_index = max_index
+
+        _max_pdf_index += 1
+        new_index = _max_pdf_index
         fname = f"PDF_{new_index}.pdf"
     except Exception as e:
         logger.error(f"Naming Error: {e}")
