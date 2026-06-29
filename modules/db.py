@@ -3,6 +3,7 @@ from bson.objectid import ObjectId
 from datetime import datetime
 from config import MONGO_URI, MONGO_DB_NAME
 import os
+import re
 
 _client = MongoClient(MONGO_URI)
 
@@ -19,6 +20,8 @@ def init_db():
     db = _db()
     db.projects.create_index("name")
     db.pdfs.create_index("project_id")
+    db.pdfs.create_index("filename")
+    db.pdfs.create_index("path")
     db.chats.create_index("project_id")
     db.messages.create_index("chat_id")
 
@@ -72,6 +75,33 @@ def get_pdf(pdf_id):
     if not d:
         return None
     return {"id": str(d["_id"]), "project_id": d.get("project_id"), "filename": d.get("filename"), "path": d.get("path")}
+
+def find_pdf_by_name(target_name):
+    """Finds a PDF by matching the target name in the original filename or system path."""
+    db = _db()
+    # Escape target_name for safe regex matching
+    safe_name = re.escape(target_name)
+    # Case-insensitive fuzzy match on original filename and system filename (from path)
+    query = {
+        "$or": [
+            {"filename": {"$regex": safe_name, "$options": "i"}},
+            {"path": {"$regex": safe_name, "$options": "i"}}
+        ]
+    }
+    d = db.pdfs.find_one(query)
+    if not d:
+        return None
+
+    # Return document with id as string and sanitized filename/id from path
+    # In web_app.py, the code expects the id to be the filename without .pdf extension
+    # which is stored in the path (e.g., data/uploads/PDF_1.pdf)
+    system_id = os.path.basename(d.get("path", "")).replace(".pdf", "")
+    return {
+        "id": str(d["_id"]),
+        "system_id": system_id,
+        "filename": d.get("filename"),
+        "path": d.get("path")
+    }
 
 def delete_pdf(pdf_id):
     db = _db()

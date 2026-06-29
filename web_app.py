@@ -12,7 +12,7 @@ from modules.gemini_client import GeminiClient
 from modules.text_processor import get_text_chunk, combine_doc_text
 from modules.doc_store import save as save_doc, load as load_doc
 from config import LOGS_DIR, UPLOADS_DIR, TEMP_AUDIO_DIR, TTS_LANGUAGE
-from modules.db import init_db, ensure_default_project, list_projects, create_project, get_project, list_project_pdfs, add_pdf, get_pdf, delete_pdf, create_chat, list_chats, add_message, list_messages
+from modules.db import init_db, ensure_default_project, list_projects, create_project, get_project, list_project_pdfs, add_pdf, get_pdf, find_pdf_by_name, delete_pdf, create_chat, list_chats, add_message, list_messages
 
 logging.basicConfig(
     level=logging.INFO,
@@ -368,16 +368,11 @@ def assistant_action():
 
     elif intent == "OPEN_DOCUMENT":
         target_name = entities.get("filename", "").lower()
-        # Search library for matching file
+        # Search library for matching file using optimized database query
         found_id = None
-        if os.path.exists(UPLOADS_DIR):
-            for f in os.listdir(UPLOADS_DIR):
-                if f.endswith(".pdf"):
-                    # Fuzzy match: "phravin" in "phravin.pdf"
-                    f_clean = f.lower().replace(".pdf", "")
-                    if target_name in f_clean:
-                        found_id = f.replace(".pdf", "") # ID is sanitized filename
-                        break
+        pdf_info = find_pdf_by_name(target_name)
+        if pdf_info:
+            found_id = pdf_info["system_id"]
         
         if found_id:
             response_text = f"Opening {found_id}."
