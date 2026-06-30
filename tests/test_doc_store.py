@@ -1,12 +1,43 @@
 import os
 import json
-from unittest.mock import patch, mock_open
 import pytest
+from unittest.mock import patch, mock_open
 
 os.environ['GEMINI_API_KEY'] = 'test_key'
 
-from modules.doc_store import save
+from modules.doc_store import load, save
 from config import DOCS_DIR
+
+@patch("os.path.exists")
+@patch("builtins.open", new_callable=mock_open, read_data='{"title": "Test Doc", "content": "This is a test."}')
+def test_load_existing_doc(mock_file, mock_exists):
+    # Setup
+    mock_exists.return_value = True
+    doc_id = "test_doc_123"
+
+    # Execute
+    result = load(doc_id)
+
+    # Assert
+    assert result == {"title": "Test Doc", "content": "This is a test."}
+    # verify that exist check happened
+    mock_exists.assert_called_once()
+    # verify that open happened
+    mock_file.assert_called_once()
+
+@patch("os.path.exists")
+def test_load_nonexistent_doc(mock_exists):
+    # Setup
+    mock_exists.return_value = False
+    doc_id = "missing_doc"
+
+    # Execute
+    result = load(doc_id)
+
+    # Assert
+    assert result == {}
+    mock_exists.assert_called_once()
+
 
 def test_save_with_custom_id():
     doc_structure = {"title": "Test Doc", "content": "Hello World"}
