@@ -12,7 +12,7 @@ from modules.gemini_client import GeminiClient
 from modules.text_processor import get_text_chunk, combine_doc_text
 from modules.doc_store import save as save_doc, load as load_doc
 from config import LOGS_DIR, UPLOADS_DIR, TEMP_AUDIO_DIR, TTS_LANGUAGE
-from modules.db import init_db, ensure_default_project, list_projects, create_project, get_project, list_project_pdfs, add_pdf, get_pdf, delete_pdf, create_chat, list_chats, add_message, list_messages
+from modules.db import init_db, ensure_default_project, list_projects, create_project, get_project, list_project_pdfs, add_pdf, get_pdf, find_pdf_by_name, delete_pdf, create_chat, list_chats, add_message, list_messages
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,7 +25,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret")
+
+flask_secret_key = os.getenv("FLASK_SECRET_KEY")
+if not flask_secret_key:
+    raise ValueError("FLASK_SECRET_KEY environment variable not set. Please set it to a secure random string.")
+app.secret_key = flask_secret_key
+
 CORS(app, supports_credentials=True) # Enable CORS for frontend
 
 ir = IntentRecognizer()
@@ -50,9 +55,12 @@ def _generate_audio(text):
 
 # --- API Endpoints ---
 
+_max_pdf_index = None
+
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     """Upload PDF and return metadata."""
+    global _max_pdf_index
     file = request.files.get("pdf")
     if not file or not file.filename.lower().endswith(".pdf"):
         return jsonify({"error": "Invalid file format. Please upload a PDF."}), 400
@@ -61,17 +69,22 @@ def api_upload():
     
     # Sequential Naming Logic
     try:
-        existing_files = [f for f in os.listdir(UPLOADS_DIR) if f.startswith("PDF_") and f.endswith(".pdf")]
-        max_index = 0
-        import re
-        for f in existing_files:
-            match = re.search(r"PDF_(\d+).pdf", f)
-            if match:
-                idx = int(match.group(1))
-                if idx > max_index:
-                    max_index = idx
-        
-        new_index = max_index + 1
+        if _max_pdf_index is None:
+            max_index = 0
+            # if os.scandir fails (e.g. UPLOADS_DIR doesn't exist), let it raise and fallback
+            for entry in os.scandir(UPLOADS_DIR):
+                name = entry.name
+                if name.startswith("PDF_") and name.endswith(".pdf"):
+                    try:
+                        idx = int(name[4:-4])
+                        if idx > max_index:
+                            max_index = idx
+                    except ValueError:
+                        pass
+            _max_pdf_index = max_index
+
+        _max_pdf_index += 1
+        new_index = _max_pdf_index
         fname = f"PDF_{new_index}.pdf"
     except Exception as e:
         logger.error(f"Naming Error: {e}")
@@ -125,18 +138,32 @@ def api_library():
 def api_delete_document(doc_id):
     """Delete a document."""
     try:
+        abs_base = os.path.abspath(UPLOADS_DIR)
         fname = f"{doc_id}.pdf"
-        fpath = os.path.join(UPLOADS_DIR, fname)
+        fpath = os.path.abspath(os.path.join(abs_base, fname))
         
-        abs_uploads_dir = os.path.abspath(UPLOADS_DIR)
-        abs_fpath = os.path.abspath(fpath)
+@app.route("/api/library/<doc_id>", methods=["DELETE"])
+def api_delete_document(doc_id):
+    """Delete a document."""
+    try:
+        abs_base = os.path.abspath(UPLOADS_DIR)
+        fname = f"{doc_id}.pdf"
+        abs_fpath = os.path.abspath(os.path.join(abs_base, fname))
 
-        if not abs_fpath.startswith(abs_uploads_dir + os.sep):
+        # Prevent path traversal by ensuring the resolved file path is inside the uploads dir
+        if os.path.commonpath([abs_base, abs_fpath]) != abs_base:
             logger.warning(f"Path traversal attempt blocked: {doc_id}")
             return jsonify({"error": "Invalid document ID"}), 400
 
         if os.path.exists(abs_fpath):
             os.remove(abs_fpath)
+            return jsonify({"message": "Document deleted"}), 200
+        else:
+            return jsonify({"error": "File not found"}), 404
+
+    except Exception as e:
+        logger.error(f"Delete Error: {e}")
+        return jsonify({"error": str(e)}), 500
             return jsonify({"message": "Document deleted"}), 200
         else:
             return jsonify({"error": "File not found"}), 404
@@ -375,16 +402,11 @@ def assistant_action():
 
     elif intent == "OPEN_DOCUMENT":
         target_name = entities.get("filename", "").lower()
-        # Search library for matching file
+        # Search library for matching file using optimized database query
         found_id = None
-        if os.path.exists(UPLOADS_DIR):
-            for f in os.listdir(UPLOADS_DIR):
-                if f.endswith(".pdf"):
-                    # Fuzzy match: "phravin" in "phravin.pdf"
-                    f_clean = f.lower().replace(".pdf", "")
-                    if target_name in f_clean:
-                        found_id = f.replace(".pdf", "") # ID is sanitized filename
-                        break
+        pdf_info = find_pdf_by_name(target_name)
+        if pdf_info:
+            found_id = pdf_info["system_id"]
         
         if found_id:
             response_text = f"Opening {found_id}."
