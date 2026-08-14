@@ -51,12 +51,23 @@ def extract_text_from_pdf(pdf_path):
     return native if native else {0: [""]}
 
 def _extract_text_native(pdf_path):
-    """Extracts text from a native PDF using pdfplumber."""
+    """Extracts text from a native PDF using pdfplumber. Aborts early if it appears scanned."""
     doc_structure = {}
     try:
         with pdfplumber.open(pdf_path) as pdf:
+            has_text_early = False
             for i, page in enumerate(pdf.pages):
                 page_text = page.extract_text()
+
+                # Check for text in the first 3 pages
+                if i < 3 and page_text and len(page_text.strip()) > 10:
+                    has_text_early = True
+
+                # If we've checked the 3rd page (index 2) or the last page (if <3 pages) and found no text, abort
+                if (i == 2 or i == len(pdf.pages) - 1) and not has_text_early:
+                    logger.info(f"PDF {pdf_path} appears to be scanned based on initial pages. Aborting native extraction.")
+                    return {}
+
                 if page_text:
                     clean_text = page_text.strip()
                     chunks = _split_text_chunks(clean_text)

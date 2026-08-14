@@ -3,7 +3,8 @@ import json
 import pytest
 from unittest.mock import patch, mock_open
 
-os.environ['GEMINI_API_KEY'] = 'test_key'
+# Ensure any code that expects GEMINI_API_KEY in env won't fail during tests
+os.environ.setdefault('GEMINI_API_KEY', 'test_key')
 
 from modules.doc_store import load, save
 from config import DOCS_DIR
@@ -38,7 +39,6 @@ def test_load_nonexistent_doc(mock_exists):
     assert result == {}
     mock_exists.assert_called_once()
 
-
 def test_save_with_custom_id():
     doc_structure = {"title": "Test Doc", "content": "Hello World"}
     custom_id = "my-custom-id"
@@ -53,7 +53,6 @@ def test_save_with_custom_id():
                 mocked_join.assert_called_once_with(DOCS_DIR, f"{custom_id}.json")
                 mocked_open.assert_called_once_with(expected_path, "w", encoding="utf-8")
                 mocked_json_dump.assert_called_once_with(doc_structure, mocked_open(), ensure_ascii=False)
-
 
 def test_save_without_custom_id():
     doc_structure = {"title": "Another Doc", "content": "Hello again"}
