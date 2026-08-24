@@ -142,11 +142,28 @@ def api_delete_document(doc_id):
         fname = f"{doc_id}.pdf"
         fpath = os.path.abspath(os.path.join(abs_base, fname))
         
-        if not fpath.startswith(abs_base + os.sep):
+@app.route("/api/library/<doc_id>", methods=["DELETE"])
+def api_delete_document(doc_id):
+    """Delete a document."""
+    try:
+        abs_base = os.path.abspath(UPLOADS_DIR)
+        fname = f"{doc_id}.pdf"
+        abs_fpath = os.path.abspath(os.path.join(abs_base, fname))
+
+        # Prevent path traversal by ensuring the resolved file path is inside the uploads dir
+        if os.path.commonpath([abs_base, abs_fpath]) != abs_base:
+            logger.warning(f"Path traversal attempt blocked: {doc_id}")
             return jsonify({"error": "Invalid document ID"}), 400
 
-        if os.path.exists(fpath):
-            os.remove(fpath)
+        if os.path.exists(abs_fpath):
+            os.remove(abs_fpath)
+            return jsonify({"message": "Document deleted"}), 200
+        else:
+            return jsonify({"error": "File not found"}), 404
+
+    except Exception as e:
+        logger.error(f"Delete Error: {e}")
+        return jsonify({"error": str(e)}), 500
             return jsonify({"message": "Document deleted"}), 200
         else:
             return jsonify({"error": "File not found"}), 404
